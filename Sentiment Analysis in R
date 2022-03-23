@@ -1,0 +1,304 @@
+---
+title: "Text Mining with R"
+author: "Eralda Gjika"
+date: "February 07, 2022"
+output:
+  html_notebook: default
+  word_document: default
+---
+## Text Mining {.tabset}
+### Sentiment Analysis
+
+**Sentiment Analysis.**
+We wish to compare the sentiment distributions across Beatles albums from the start to the end of their core UK studio albums.
+
+Here I have used **“Beatles Song Album Year.Rdata” file from Assignment 2. It contains lyrics, albums,track names, and year of release for the Beatles UK studio albums.
+
+The dataset used is the one imported from the csv file found in the assignment folder. So we have 174 song and 4 variables which are : songlyrics, track_title, album and year.
+
+[TidyTextMining](https://www.tidytextmining.com/tfidf.html) 
+
+Set working directory your file where beatles Song Album Year.Rdata is. Then click on the data and upload it into your working space.  You will see the name of the data appear as: Lyric.album.year.keep
+```{r echo=TRUE}
+load("D:/ALDA 2021/CRYSTAL System-Data Science project/Crystal-DS Project 3/TEC-DS -Week materials/Week 5/Beatles Song Album Year.Rdata")
+Beatles_lyrics<-Lyric.album.year.keep
+#View(Beatles_lyrics)
+head(Beatles_lyrics,2)
+dim(Beatles_lyrics)
+```
+
+The dataset used (from the Assignment folder) contains the UK studio recordings, in total 12 Albums. [Source](https://www.beatlesbible.com/albums/). From the source used, the first UK studio recording is album "Please Please Me" in 1963, and the last UK studio recording was the album "Let It Be" in 1970.            
+(**Note**: I am not familiar with the Beatles songs so I rely on this source for the classification of the UK albums as above.)
+The codes below will create tibbles for each album and respectively display the songlyrics and title of the song. 14 songs in the album "Please Please Me" and 12 songs in the album "Let It Be".
+
+```{r echo=TRUE}
+library(tidyverse)
+
+# The track list of "Please Please me"
+Beatles_UK_1<-Beatles_lyrics %>%  
+  filter(album %in% "Please Please Me")
+View(Beatles_UK_1)
+Beatles_1_lyric<-Beatles_UK_1 %>% select(songlyric)# save all lyrics of songs in album "Please Please Me"
+# Beatles_1_lyric # print the lyrics of songs from album "Please Please Me"
+Beatles_1_title<-Beatles_UK_1 %>% select(track_title)# save all title of songs in album "Please Please Me"
+# Beatles_1_title # print the title song from album "Please Please Me"
+
+# The track list of "Let It Be"
+Beatles_UK_2<-Beatles_lyrics %>%  
+  filter(album %in% "Let It Be")
+View(Beatles_UK_2)
+Beatles_2_lyric<-Beatles_UK_2 %>% select(songlyric)# save all lyrics of songs in album "Please Please Me"
+# Beatles_2_lyric # print the lyrics of songs from album "Please Please Me"
+Beatles_2_title<-Beatles_UK_2 %>% select(track_title)# save all title of songs in album "Please Please Me"
+# Beatles_2_title # print the title song from album "Please Please Me"
+
+
+# to have both albums in one dataset
+Beatles_UK_1_2<-Beatles_lyrics %>% 
+  filter(album %in% c("Please Please Me","Let It Be")) %>% # to have both albums in one dataset
+  group_by(album)%>%
+  select(track_title) %>% # group by album
+  summarise(nr_of_song=length(track_title)) # count the number of song per album
+# Beatles_UK_1_2 # print the number of song per album
+
+# print ALL albums and number of songs per album
+Beatles_lyrics %>% group_by(album) %>% select(track_title)%>% unique()%>% count()
+```
+#### **Sentiment Analysis using NRC, bing and SFINN lexicons**
+
+Libraries used from this part and on are:
+```{r include=FALSE}
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(tidytext)
+library(textdata)# to access NRC word -emotion association lexicon1
+library(tm)
+library(topicmodels)
+library(janitor) # cleans up some small tables 
+```
+
+Here is one of the references used apart the lecture notes: [Reference in R](https://www.tidytextmining.com/sentiment.html).
+```{r}
+# print all albums and number of songs per album
+Beatles_lyrics %>% group_by(album) %>% select(track_title)%>% unique()%>% count()
+
+# number of song per album
+Beatles_lyrics %>% group_by(album) %>% select(track_title)%>% unique()%>%
+count() %>% ungroup() %>% View()
+
+Lyrics1 = Beatles_lyrics %>% filter(album== "Please Please Me")
+head(Lyrics1,1)
+
+Lyrics2 = Beatles_lyrics %>% filter(album== "Let It Be")
+head(Lyrics2,1)
+
+Lyrics = rbind(Lyrics1,Lyrics2) # create a tibble with two albums 
+head(Lyrics,1)
+```
+
+Let's find unique words in our two albums and add **word** column which will be latter analysed:
+```{r}
+Lyrics_word<-Lyrics %>%
+     unnest_tokens(output = word, input = songlyric) %>%
+     anti_join(get_stopwords()) %>%
+     group_by(track_title)
+```
+#### **NRC lexicons**
+This code here will add the column **word** for each song and the **sentiment** column to classify it.
+```{r}
+# nrc lexicon 
+Lyrics_NRC<-Lyrics_word %>% inner_join(get_sentiments("nrc") ) 
+head(Lyrics_NRC)
+```
+#### **Count occurrence of positive and negative sentiments using NRC-word-emotion association lexicon (EmoLex)**
+The code below will count in each album the number of words grouped by sentimnet (there are 10 different sentiments).
+```{r}
+#Count the occurrence with each album
+Sents = Lyrics_NRC %>%group_by(album)%>%count(sentiment) %>% ungroup()
+Sents
+
+Lyrics_NRC %>% group_by(album)%>% filter(sentiment %in% c("positive", "negative")) %>% 
+  count(sentiment)
+```
+#### **Graphs to compare sentiments between albums**
+Here we take into consideration three situations:
+
+- **ONLY** positive and negative sentiments
+
+- **ALL apart** positive and negative sentiments
+
+- **ALL** sentiments
+
+Graphics will show the distribution of sentiments for each filter (as above).
+```{r}
+par(mfrow=c(1,3))
+# Stacked percent only for positive and negative sentiments
+Sents %>% filter((sentiment =="positive"|sentiment=="negative")) %>%
+ ggplot(aes(fill=sentiment, y=n, x=album)) +
+ geom_bar(position="fill", stat="identity")
+
+# Stacked percent by removing positive and negative sentiments
+Sents %>% filter(!(sentiment =="positive"|sentiment=="negative")) %>%
+ ggplot(aes(fill=sentiment, y=n, x=album)) +
+ geom_bar(position="fill", stat="identity")
+
+# Stacked percent all sentiments
+Sents %>% 
+ ggplot(aes(fill=sentiment, y=n, x=album)) +
+ geom_bar(position="fill", stat="identity") 
+```
+#### **Table of number of sentiments by album using NRC**
+```{r}
+MyTable = Sents %>%
+pivot_wider(names_from=sentiment, values_from=n)
+MyTable
+```
+
+The three graphs above show sentiment analysis for the two albums. The first graph, considers ALL sentiments ; the second graph removes sentiments "positive" and "negative", the thoird graph displays the distribution of ALL sentiments using NRC. 
+Observing the distributions of this sentiments in two albums we can think that the album **"Pleas Please Me"** has greater positive-joy sentiments compared to the album **"Let it Be"** (which was the last album by Beatles. Maybe they predicted the *end* of "Beatles Epoch"). In the second graph (by removing "positive " and " negative " sentiments) we also observe joy  to have a larger distribution in total sentiments compared to joy in the album "Let it Be" where we see **anticipation, joy and trust** distributed almost in the same ratio. 
+
+##### **BING sentiment analysis**
+```{r}
+Lyrics_bing<-Lyrics_word %>% inner_join(get_sentiments("bing") ) 
+Lyrics_bing
+
+#Count the occurrence with each album
+Sents = Lyrics_bing %>%group_by(album)%>%count(sentiment) %>% ungroup()
+Sents
+
+# Stacked percent all sentiments (positive and negative)
+Sents %>% 
+ ggplot(aes(fill=sentiment, y=n, x=album)) +
+ geom_bar(position="fill", stat="identity") 
+```
+Using **bing** lexicons we observe that measured in number of words in the first album "Please Please Me" this number is greater (111-negative and 209-positive) compared to the last album "Let It Be" (56-negative and 132-positive) **BUT** measured as a percentage (see graph) we observe that this two sentiments have almost the same distribution in both albums. Respectively approximate 65-68% positive sentiment and this figure is greater in the album "Let It Be".The difference here, is smaller.
+
+#### **AFINN sentiment analysis**
+Here we are showing different graphs to better visualize and compare the distribution of sentiment words in two albums.
+```{r}
+Lyrics_afinn<-Lyrics_word %>% inner_join(get_sentiments("afinn") ) 
+Lyrics_afinn
+
+#Count the occurrence with each album of positive and negative sentiments measured by numercial values
+Sents =  Lyrics_afinn %>% group_by(album)%>% count(value)%>% ungroup()
+Sents
+
+#Ploting the distribution of sentiments 
+p<-ggplot(Sents, aes(x=value, y=n, fill=album)) + 
+     geom_bar(position = 'dodge', stat='identity') +
+     geom_text(aes(label=n), position=position_dodge(width=0.9), vjust=-0.25)
+p
+p+facet_wrap(~album, ncol = 2)
+  
+# Stacked percent all sentiments (positive and negative)
+Sents %>% 
+ ggplot(aes(x=value,y=n,fill=album)) +
+ geom_bar(position="fill", stat="identity") 
+
+# comparing distributions on albums
+p<-ggplot(Sents, aes(x=value, y=n, fill=album)) +
+     geom_area()
+p+facet_wrap(~album, ncol = 2)
+```
+To have an estimate of the net sentiment **(positive - negative)** in each album for each sentiment lexicon. Let’s bind them together and visualize them in figure below.
+The graph below shows the differences between number of positive sentiments and negative sentiments as a measure to display better the weight of these feelings (sentiments) in two albums. From all three lexicons this difference seem to be greater in the album "Please Please Me".
+```{r}
+afinn <- Lyrics_word %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(album) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+afinn
+
+bing_and_nrc <- bind_rows(
+  Lyrics_word %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  Lyrics_word %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, album, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+bing_and_nrc
+```
+
+```{r}
+# Plotting the three sentiment lexicons
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(album, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+#### **Hypothesis test**
+**Chi-Square** Test can be used as a test for relationship between categorical variables.
+
+• Ho: There is no relationship between variables (album and sentiment); 
+
+We can perform a Chi-Square Test for Independence to test for dependency/correlation in our two categorical variables (Album and sentiments). 
+- **Note:** Chi-Square is valid for categorical variables and ordinal variables with few categories which in our case it can be used.
+
+If we obtain a **p-value < 0.05**, we have evidence of an association between the categorical variables, so we reject null hypothesis.
+
+**NRC**
+```{r}
+#reminding EmoLex-NRC without positive and negative sentiments
+Sents_nrc = Lyrics_NRC %>% filter(!sentiment %in% c("positive", "negative")) %>% group_by(album)%>%count(sentiment) %>% ungroup()
+Sents_nrc
+
+# Organizing the table for a better view
+MyTable_nrc = Sents_nrc %>%
+pivot_wider(names_from=sentiment, values_from=n)
+MyTable_nrc # contigency table
+
+# create a contigency table as a matrix to pbtain the chi square results
+Matrix_nrc<-MyTable_nrc[c(1,2),2:9]
+Matrix_nrc
+chisq.test(Matrix_nrc) # Chi Square test for relationship between the variables (Album and Sentiments) 
+
+# Output
+# Pearson's Chi-squared test
+#
+#  data:  Matrix_nrc
+#  X-squared = 100.44, df = 7, p-value < 2.2e-16
+```
+**Interpretation** We obtain a **p-value < 0.05**, so we have evidence of an association between the album and sentiment words used in it.(reject Ho: There is no relationship between variables (album and sentiment))
+
+
+**Bing et al**
+
+```{r}
+# reminding Bing lexicon
+Lyrics_bing<-Lyrics_word %>% inner_join(get_sentiments("bing") ) 
+Lyrics_bing
+
+#Count the occurrence with each album
+Sents_bing = Lyrics_bing %>%group_by(album)%>%count(sentiment) %>% ungroup()
+Sents_bing
+# Organizing the table for a better view
+MyTable_bing = Sents_bing %>%
+pivot_wider(names_from=sentiment, values_from=n)
+MyTable_bing # contigency table
+
+# create a contigency table as a matrix to pbtain the chi square results
+Matrix_bing<-MyTable_bing[c(1,2),2:3]
+Matrix_bing
+chisq.test(Matrix_bing) # Chi Square test for relationship between the variables (Album and Sentiments) 
+
+```
+
+**Interpretation:** For **Bing lexicon** we obtain a **p-value = 0.2996 > 0.05**, so we do **NOT** reject H0: Based ont his method of sentiment analysis , there is no relationship between variables (album and sentiment). The decision of these two different lexicos depend also on the number of sentiments used to test the dependence. Removing positive and negative sentiments from NRC can be a reason that we rejected H0 hypothesis for that subset of words.
+
+**END!**
+
+
+
+Eralda Gjika (Dhamo) 
